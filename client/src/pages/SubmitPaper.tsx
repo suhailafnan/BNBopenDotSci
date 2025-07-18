@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { ethers } from 'ethers';
-import { RootState } from '../redux/store';
+import type { RootState } from '../redux/store';
 import { logicContractAddress, logicContractABI } from '../contracts';
-import { UploadCloud, FileText, Hash } from 'lucide-react';
+import { FileText, Hash } from 'lucide-react';
 
 // --- MOCK GREENFIELD UPLOAD ---
 // In a real app, this would use the Greenfield SDK. For the hackathon, we simulate it.
@@ -23,7 +23,7 @@ export const SubmitPaper = () => {
     const { signer } = useSelector((state: RootState) => state.wallet);
     const [title, setTitle] = useState('');
     const [pdfFile, setPdfFile] = useState<File | null>(null);
-    const [scriptFile, setScriptFile] = useState<File | null>(null);
+    // FIX: Removed unused scriptFile state
     const [outputHash, setOutputHash] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
@@ -69,7 +69,7 @@ export const SubmitPaper = () => {
             // Reset form
             setTitle('');
             setPdfFile(null);
-            setScriptFile(null);
+            // FIX: Removed unused scriptFile state reset
             setOutputHash('');
 
         } catch (error) {

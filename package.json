@@ -25,7 +25,7 @@
     "@types/node": "^24.0.14",
     "autoprefixer": "^10.4.21",
     "chai": "^4.5.0",
-    "ethers": "^6.15.0",
+    "ethers": "^5.8.0",
     "hardhat": "^2.26.0",
     "hardhat-gas-reporter": "^2.3.0",
     "postcss": "^8.5.6",
@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.4.0",
-    "dotenv": "^17.2.0"
+    "dotenv": "^17.2.0",
+    "lucide-react": "^0.525.0"
   }
 }
