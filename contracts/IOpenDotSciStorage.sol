@@ -1,19 +1,21 @@
+
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// FILE: contracts/IOpenDotSciStorage.sol
-// This is an Interface. It defines the functions that our Logic contract
-// can call on our Storage contract. It's a blueprint for communication.
-
 interface IOpenDotSciStorage {
     enum ProposalStatus { Pending, AI_Approved, Rejected, Funded }
+    enum PaperStatus { Pending, AI_Approved, Peer_Approved, Reproduced }
 
     function incrementPaperCounter() external returns (uint256);
-    function storePaper(uint256 _id, string memory _cid) external;
+    function storePaper(uint256 _id, address _author, string memory _cid, bytes32 _expectedHash) external;
+    function setPaperStatus(uint256 _paperId, PaperStatus _status) external;
+    function voteForPaper(uint256 _paperId, address _voter) external;
+    function voteAgainstPaper(uint256 _paperId, address _voter) external;
+    
+    function incrementProposalCounter() external returns (uint256);
     function createGrant(uint256 _id, address _proposer, string memory _desc, uint256 _amount) external;
-    function incrementProposalCounter() external returns (uint256); // <-- FIX: Added missing function
     function setProposalStatus(uint256 _proposalId, ProposalStatus _status) external;
-    function voteFor(uint256 _proposalId, address _voter) external;
-    function voteAgainst(uint256 _proposalId, address _voter) external;
+    function voteForGrant(uint256 _proposalId, address _voter) external;
+    function voteAgainstGrant(uint256 _proposalId, address _voter) external;
 }
 

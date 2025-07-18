@@ -1,77 +1,73 @@
-// SPDX-License-Identifier: MIT
-  pragma solidity ^0.8.20;
-// FILE: contracts/OpenDotSciLogic.sol
-// THE CONTROLLER: This contract contains all business logic. It reads and writes
-// data to the Storage contract. This is the contract your frontend will talk to.
+// UPDATED CONTROLLER: Includes all new logic for AI, voting, reproducibility, and SBTs.
 
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "./IOpenDotSciStorage.sol"; // Import the interface
+import "./IOpenDotSciStorage.sol";
+import "./ReputationSBT.sol";
 
 contract OpenDotSciLogic is ERC721URIStorage {
     IOpenDotSciStorage public storageContract;
+    ReputationSBT public sbtContract;
+    address public aiOracle;
 
-    // --- Events ---
-    event PaperSubmitted(uint256 indexed paperId, address indexed author, string greenfieldCID);
-    event Voted(uint256 indexed proposalId, address indexed voter, bool hasSupported);
+    event SubDAOCreated(string name, address indexed sponsor);
 
-    constructor(address _storageAddress) ERC721("OpenDotSci Paper", "ODSP") {
+    constructor(address _storageAddress, address _sbtAddress) ERC721("OpenDotSci Paper", "ODSP") {
         storageContract = IOpenDotSciStorage(_storageAddress);
+        sbtContract = ReputationSBT(_sbtAddress);
+        aiOracle = msg.sender; // For the demo, the deployer is the oracle
     }
 
-    // --- Core Public Functions ---
-
-    function submitPaper(string memory _title, string memory _greenfieldCID, string memory _tokenURICID) external {
+    // --- Paper Lifecycle ---
+    function submitPaper(string memory _tokenURICID, string memory _greenfieldCID, bytes32 _expectedHash) external {
         uint256 newId = storageContract.incrementPaperCounter();
-        
-        // Mint the NFT to the author
+        storageContract.storePaper(newId, msg.sender, _greenfieldCID, _expectedHash);
         _safeMint(msg.sender, newId);
-        
-        // Set the NFT's metadata (pointing to a JSON on Greenfield)
         _setTokenURI(newId, _tokenURICID);
-        
-        // Store the full paper's CID in the storage contract
-        storageContract.storePaper(newId, _greenfieldCID);
-        
-        emit PaperSubmitted(newId, msg.sender, _greenfieldCID);
     }
 
+    function approvePaperByAI(uint256 _paperId) external {
+        require(msg.sender == aiOracle, "Only AI Oracle");
+        storageContract.setPaperStatus(_paperId, IOpenDotSciStorage.PaperStatus.AI_Approved);
+    }
+
+    function voteOnPaper(uint256 _paperId, bool _supports) external payable {
+        require(msg.value >= 0.0001 ether, "Voting fee required");
+        // In a real app, you'd add a check here to ensure paper status is AI_Approved
+        if (_supports) {
+            storageContract.voteForPaper(_paperId, msg.sender);
+        } else {
+            storageContract.voteAgainstPaper(_paperId, msg.sender);
+        }
+    }
+
+    function finalizePaper(uint256 _paperId, address _author) external {
+        // In a real app, you'd read vote counts from storage and check them here.
+        // For the demo, we'll assume it passes and mint the SBT.
+        storageContract.setPaperStatus(_paperId, IOpenDotSciStorage.PaperStatus.Peer_Approved);
+        sbtContract.safeMint(_author, "Verified Researcher");
+    }
+
+    // --- Reproducibility ---
+    function submitReproduction(uint256 _paperId, address _replicator, bool _isSuccess) external {
+        require(msg.sender == aiOracle, "Only AI Oracle");
+        if (_isSuccess) {
+            storageContract.setPaperStatus(_paperId, IOpenDotSciStorage.PaperStatus.Reproduced);
+            sbtContract.safeMint(_replicator, "Verified Replicator");
+        }
+    }
+
+    // --- DAO & Sponsor Track ---
     function createGrantProposal(string memory _description, uint256 _amount) external {
         uint256 newProposalId = storageContract.incrementProposalCounter();
         storageContract.createGrant(newProposalId, msg.sender, _description, _amount);
     }
-
-    function approveProposalByAI(uint256 _proposalId) external {
-        // In a real app, this would be restricted to a trusted AI oracle
-        // For the hackathon, anyone can call it to move the demo forward
-        storageContract.setProposalStatus(_proposalId, IOpenDotSciStorage.ProposalStatus.AI_Approved);
-    }
-
-    function voteOnProposal(uint256 _proposalId, bool _supports) external payable {
-        // Require a small fee to vote, preventing spam
-        require(msg.value >= 0.0001 ether, "Voting fee required");
-
-        // Note: We would need to read the proposal status from the storage contract.
-        // To do this properly, the storage contract needs getter functions.
-        // For the hackathon, we'll assume the frontend checks this.
-        // A full implementation would add:
-        // require(storageContract.proposals(_proposalId).status == IOpenDotSciStorage.ProposalStatus.AI_Approved, "Proposal not AI approved");
-
-        if (_supports) {
-            storageContract.voteFor(_proposalId, msg.sender);
-        } else {
-            storageContract.voteAgainst(_proposalId, msg.sender);
-        }
-        
-        emit Voted(_proposalId, msg.sender, _supports);
-    }
-
-    function executeProposal(uint256 _proposalId) external {
-        // Logic to check if a proposal has passed and send funds would go here.
-        // This involves adding getter functions to the storage contract to read vote counts.
-        // Example:
-        // (uint256 forVotes, uint256 againstVotes) = storageContract.getVoteCounts(_proposalId);
-        // require(forVotes > againstVotes, "Proposal did not pass");
-        // ... send funds ...
+    
+    function createSubDAO(string memory _daoName) external {
+        // For the hackathon, we simulate the creation by emitting an event.
+        // A full implementation would deploy a new contract here.
+        emit SubDAOCreated(_daoName, msg.sender);
     }
 }

@@ -1,16 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-// FILE: contracts/OpenDotSciStorage.sol
-// THE MODEL: This contract ONLY holds data. It has no public logic.
-// Its only job is to store state and ensure only the authorized Controller
-// contract can make changes to it.
 
 contract OpenDotSciStorage {
     address public owner;
     address public controller;
 
-    // --- Data Structs ---
+    // --- Enums ---
     enum ProposalStatus { Pending, AI_Approved, Rejected, Funded }
+    enum PaperStatus { Pending, AI_Approved, Peer_Approved, Reproduced }
+
+    // --- Structs ---
+    struct Paper {
+        uint256 id;
+        address author;
+        string greenfieldCID;
+        bytes32 expectedOutputHash;
+        PaperStatus status;
+        uint256 forVotes;
+        uint256 againstVotes;
+        mapping(address => bool) hasVoted;
+    }
 
     struct GrantProposal {
         uint256 id;
@@ -24,74 +33,69 @@ contract OpenDotSciStorage {
         mapping(address => bool) hasVoted;
     }
 
-    // --- State Variables (The Database) ---
-    mapping(uint256 => string) public paperDataCID;
+    // --- State Variables ---
+    mapping(uint256 => Paper) public papers;
     mapping(uint256 => GrantProposal) public proposals;
     uint256 public paperCounter;
     uint256 public proposalCounter;
 
-    // --- Events ---
-    event ControllerSet(address indexed newController);
-    event GrantCreated(uint256 indexed proposalId, address indexed proposer);
-    event StatusChanged(uint256 indexed proposalId, ProposalStatus newStatus);
+    // --- Modifiers ---
+    modifier onlyOwner() { require(msg.sender == owner, "Not owner"); _; }
+    modifier onlyController() { require(msg.sender == controller, "Not controller"); _; }
 
-    // --- Modifiers (Access Control) ---
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Caller is not the owner");
-        _;
-    }
+    constructor() { owner = msg.sender; }
 
-    modifier onlyController() {
-        require(msg.sender == controller, "Caller is not the controller");
-        _;
-    }
-
-    constructor() {
-        owner = msg.sender;
-    }
-
-    // --- Administrative Functions ---
     function setController(address _controller) external onlyOwner {
         controller = _controller;
-        emit ControllerSet(_controller);
     }
 
-    // --- Internal Logic Functions (Callable ONLY by the Controller) ---
+    // --- Paper Functions (Controller-only) ---
     function incrementPaperCounter() external onlyController returns (uint256) {
-        paperCounter++;
-        return paperCounter;
+        return ++paperCounter;
+    }
+    function storePaper(uint256 _id, address _author, string memory _cid, bytes32 _expectedHash) external onlyController {
+        papers[_id].id = _id;
+        papers[_id].author = _author;
+        papers[_id].greenfieldCID = _cid;
+        papers[_id].expectedOutputHash = _expectedHash;
+        papers[_id].status = PaperStatus.Pending;
+    }
+    function setPaperStatus(uint256 _paperId, PaperStatus _status) external onlyController {
+        papers[_paperId].status = _status;
+    }
+    function voteForPaper(uint256 _paperId, address _voter) external onlyController {
+        require(!papers[_paperId].hasVoted[_voter], "Already voted");
+        papers[_paperId].forVotes++;
+        papers[_paperId].hasVoted[_voter] = true;
+    }
+    function voteAgainstPaper(uint256 _paperId, address _voter) external onlyController {
+        require(!papers[_paperId].hasVoted[_voter], "Already voted");
+        papers[_paperId].againstVotes++;
+        papers[_paperId].hasVoted[_voter] = true;
     }
 
-    function storePaper(uint256 _id, string memory _cid) external onlyController {
-        paperDataCID[_id] = _cid;
-    }
-
-    function createGrant(uint256 _id, address _proposer, string memory _desc, uint256 _amount) external onlyController {
-        proposals[_id].id = _id;
-        proposals[_id].proposer = _proposer;
-        proposals[_id].description = _desc;
-        proposals[_id].requestedAmount = _amount;
-        proposals[_id].status = ProposalStatus.Pending;
-        emit GrantCreated(_id, _proposer);
-    }
-    
+    // --- Grant Functions (Controller-only) ---
     function incrementProposalCounter() external onlyController returns (uint256) {
-        proposalCounter++;
-        return proposalCounter;
+        return ++proposalCounter;
     }
-
+    function createGrant(uint256 _id, address _proposer, string memory _desc, uint256 _amount) external onlyController {
+        // Initialize struct member by member, not all at once.
+        GrantProposal storage newProposal = proposals[_id];
+        newProposal.id = _id;
+        newProposal.proposer = _proposer;
+        newProposal.description = _desc;
+        newProposal.requestedAmount = _amount;
+        newProposal.status = ProposalStatus.Pending;
+    }
     function setProposalStatus(uint256 _proposalId, ProposalStatus _status) external onlyController {
         proposals[_proposalId].status = _status;
-        emit StatusChanged(_proposalId, _status);
     }
-
-    function voteFor(uint256 _proposalId, address _voter) external onlyController {
+    function voteForGrant(uint256 _proposalId, address _voter) external onlyController {
         require(!proposals[_proposalId].hasVoted[_voter], "Already voted");
         proposals[_proposalId].forVotes++;
         proposals[_proposalId].hasVoted[_voter] = true;
     }
-
-    function voteAgainst(uint256 _proposalId, address _voter) external onlyController {
+    function voteAgainstGrant(uint256 _proposalId, address _voter) external onlyController {
         require(!proposals[_proposalId].hasVoted[_voter], "Already voted");
         proposals[_proposalId].againstVotes++;
         proposals[_proposalId].hasVoted[_voter] = true;
