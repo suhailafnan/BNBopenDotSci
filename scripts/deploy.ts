@@ -1,9 +1,5 @@
-
-// FILE: scripts/deploy.ts
-// UPDATED DEPLOY SCRIPT: Uses `contract.target` which is the modern, correct way for ethers v6.
-
 import hre from "hardhat";
-import { ReputationSBT } from "../typechain-types";
+import { ReputationSBT, OpenDotSciStorage, OpenDotSciLogic } from "../typechain-types";
 
 async function main() {
   const { ethers } = hre;
@@ -13,21 +9,21 @@ async function main() {
   const ReputationSBTFactory = await ethers.getContractFactory("ReputationSBT");
   const sbtContract = await ReputationSBTFactory.deploy() as ReputationSBT;
   await sbtContract.waitForDeployment();
-  const sbtAddress = sbtContract.address; // Use .target for ethers v6
+  const sbtAddress = sbtContract.target;
   console.log(`✅ ReputationSBT contract deployed to: ${sbtAddress}`);
 
   // 2. Deploy Storage Contract
   const OpenDotSciStorageFactory = await ethers.getContractFactory("OpenDotSciStorage");
-  const storageContract = await OpenDotSciStorageFactory.deploy();
+  const storageContract = await OpenDotSciStorageFactory.deploy() as OpenDotSciStorage;
   await storageContract.waitForDeployment();
-  const storageAddress = storageContract.target; // Use .target for ethers v6
+  const storageAddress = storageContract.target;
   console.log(`✅ OpenDotSciStorage (Model) deployed to: ${storageAddress}`);
 
   // 3. Deploy Logic Contract, linking it to the other two
   const OpenDotSciLogicFactory = await ethers.getContractFactory("OpenDotSciLogic");
-  const logicContract = await OpenDotSciLogicFactory.deploy(storageAddress, sbtAddress);
+  const logicContract = await OpenDotSciLogicFactory.deploy(storageAddress, sbtAddress) as OpenDotSciLogic;
   await logicContract.waitForDeployment();
-  const logicAddress = logicContract.address; // Use .target for ethers v6
+  const logicAddress = logicContract.target;
   console.log(`✅ OpenDotSciLogic (Controller) deployed to: ${logicAddress}`);
 
   // 4. Authorize Logic contract to control Storage
