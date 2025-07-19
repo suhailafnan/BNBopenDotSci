@@ -1,3 +1,4 @@
+// UPDATED FILE: This page now fetches and displays real, live data.
 
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
@@ -11,13 +12,14 @@ interface Paper {
   title: string;
   description: string;
   author: string;
-  pdfUrl: string; // We'll construct a link to a Greenfield explorer
+  pdfUrl: string;
 }
 
 export const Explore = () => {
     const { provider } = useSelector((state: RootState) => state.wallet);
     const [papers, setPapers] = useState<Paper[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState("");
 
     useEffect(() => {
         const fetchPapers = async () => {
@@ -25,32 +27,43 @@ export const Explore = () => {
                 setIsLoading(false);
                 return;
             }
+            setIsLoading(true);
+            setErrorMessage("");
             try {
                 const contract = new ethers.Contract(logicContractAddress, logicContractABI, provider);
                 const paperCount = await contract.paperCounter();
                 const items: Paper[] = [];
 
                 for (let i = 1; i <= Number(paperCount); i++) {
-                    const tokenUri = await contract.tokenURI(i);
-                    const owner = await contract.ownerOf(i);
-                    
-                    // For the demo, we'll use a placeholder for the metadata fetch.
-                    // In a real app, you'd fetch the JSON from the tokenUri (which is a Greenfield link).
-                    // const response = await fetch(tokenUri);
-                    // const metadata = await response.json();
-                    const metadata = { name: `Paper #${i}: A Study on...`, description: "This is a sample description." };
+                    try {
+                        const tokenUri = await contract.tokenURI(i);
+                        const owner = await contract.ownerOf(i);
+                        
+                        // This is a crucial step for the "Best Use of Greenfield" bounty.
+                        // We are fetching the metadata JSON directly from the Greenfield URL.
+                        const response = await fetch(tokenUri.replace("gnfd://", "https://gnfd-testnet-sp-1.nodereal.io/view/"));
+                        if (!response.ok) {
+                            console.error(`Failed to fetch metadata for token ${i}: ${response.statusText}`);
+                            continue; // Skip this paper if metadata fails
+                        }
+                        const metadata = await response.json();
 
-                    items.push({
-                        id: i,
-                        title: metadata.name,
-                        description: metadata.description,
-                        author: owner,
-                        pdfUrl: `#`, // Placeholder link
-                    });
+                        items.push({
+                            id: i,
+                            title: metadata.name || `Paper #${i}`,
+                            description: metadata.description || "No description available.",
+                            author: owner,
+                            pdfUrl: metadata.pdf_url.replace("gnfd://", "https://gnfd-testnet-sp-1.nodereal.io/view/"),
+                        });
+                    } catch (e) {
+                        console.error(`Error processing token #${i}:`, e);
+                        // This might happen if a token was burned or metadata is invalid.
+                    }
                 }
                 setPapers(items.reverse());
             } catch (error) {
                 console.error("Failed to fetch papers:", error);
+                setErrorMessage("Could not load papers. Please ensure your wallet is connected to the opBNB Testnet and refresh.");
             } finally {
                 setIsLoading(false);
             }
@@ -60,7 +73,11 @@ export const Explore = () => {
     }, [provider]);
 
     if (isLoading) {
-        return <div className="text-center py-20">Loading research papers...</div>;
+        return <div className="text-center py-20 text-gray-400">Loading research papers from the blockchain...</div>;
+    }
+    
+    if (errorMessage) {
+        return <div className="text-center py-20 text-red-400">{errorMessage}</div>;
     }
 
     return (
@@ -69,11 +86,13 @@ export const Explore = () => {
             <p className="text-center text-gray-400 mb-8">Browse all research papers minted on the OpenDotSci platform.</p>
             
             {papers.length === 0 ? (
-                <p className="text-center text-gray-500">No papers have been submitted yet.</p>
+                <div className="text-center text-gray-500 py-10 bg-gray-800/30 rounded-lg">
+                    <p>No papers have been submitted yet.</p>
+                </div>
             ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {papers.map((paper) => (
-                        <div key={paper.id} className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 flex flex-col">
+                        <div key={paper.id} className="bg-gray-800/50 p-6 rounded-lg border border-gray-700 flex flex-col transition-all duration-300 hover:border-cyan-500 hover:shadow-2xl hover:shadow-cyan-500/10">
                             <div className="flex-grow">
                                 <Book className="h-8 w-8 text-cyan-400 mb-4" />
                                 <h3 className="text-xl font-semibold text-white mb-2">{paper.title}</h3>

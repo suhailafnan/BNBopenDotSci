@@ -1,5 +1,3 @@
-// FILE: src/contracts/index.ts
-// This file remains the same.
 
 // This is your deployed Logic Contract address!
 export const logicContractAddress = "0xa7234f78c1fBD8b7d048c8aFF132fbefB28D9672";

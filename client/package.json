@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@bnb-chain/greenfield-chain-sdk": "^0.2.2",
+    "@bnb-chain/greenfield-js-sdk": "^2.2.2",
     "@reduxjs/toolkit": "^2.8.2",
     "buffer": "^6.0.3",
     "ethers": "^5.7.2",
