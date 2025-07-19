@@ -1,17 +1,14 @@
 // FILE: src/utils/greenfield.ts
-// NEW FILE: This contains the real logic for interacting with BNB Greenfield.
+// UPDATED FILE: This now uses the correct, direct import for the Greenfield SDK.
 
-// FIX: Corrected the import paths to match the latest version of the SDK.
 import { GreenfieldClient, GRN_TESTNET_URL } from '@bnb-chain/greenfield-js-sdk';
 import { ethers } from 'ethers';
 
 // Initialize the Greenfield client
 export const gfClient = GreenfieldClient.getInstance(GRN_TESTNET_URL.GRN_RPC);
 
-// This is a real, simplified upload function for the hackathon.
-// It handles creating a bucket (if needed) and uploading a file.
 export const uploadToGreenfield = async (
-    signer: ethers.Signer, // Use the specific ethers.Signer type
+    signer: ethers.Signer,
     file: File,
     setStatusMessage: (msg: string) => void
 ): Promise<string> => {
@@ -22,21 +19,15 @@ export const uploadToGreenfield = async (
     
     const provider = signer.provider;
     const userAddress = await signer.getAddress();
-
-    // 1. Get Chain ID for transaction signing
     const network = await provider.getNetwork();
     const chainId = network.chainId;
-
-    // 2. Create a unique bucket name from the user's address
     const bucketName = userAddress.toLowerCase();
 
-    // 3. Check if the bucket already exists
     setStatusMessage("Checking for Greenfield storage bucket...");
     try {
         await gfClient.bucket.headBucket(bucketName);
         console.log("Storage bucket already exists.");
     } catch (error: any) {
-        // If the bucket doesn't exist, create it. This is a one-time setup per user.
         if (error?.message?.includes('No such bucket')) {
             console.log("Bucket not found, creating a new one...");
             setStatusMessage("Creating a new storage bucket (one-time setup)...");
@@ -58,20 +49,16 @@ export const uploadToGreenfield = async (
             });
 
             const bucketBroadcastResult = await bucketSignedTx.broadcast();
-
-            if (bucketBroadcastResult.code === 0) {
-                console.log("Bucket created successfully");
-                setStatusMessage("Storage bucket created successfully!");
-            } else {
+            if (bucketBroadcastResult.code !== 0) {
                 throw new Error(`Failed to create bucket: ${bucketBroadcastResult.message}`);
             }
+            setStatusMessage("Storage bucket created successfully!");
         } else {
-            throw error; // Re-throw other errors
+            throw error;
         }
     }
 
-    // 4. Create and upload the file (object)
-    const objectName = `${Date.now()}-${file.name}`;
+    const objectName = `${Date.now()}-${file.name.replace(/\s/g, '_')}`;
     setStatusMessage(`Uploading ${file.name} to Greenfield...`);
     const createObjectTx = await gfClient.object.createObject({
         bucketName: bucketName,
@@ -93,9 +80,10 @@ export const uploadToGreenfield = async (
 
     if (objectBroadcastResult.code === 0) {
         setStatusMessage("File uploaded successfully!");
-        // Construct the viewable URL for the file
         const viewUrl = `https://gnfd-testnet-sp-1.nodereal.io/view/${bucketName}/${objectName}`;
-        return viewUrl;
+        const gnfdUrl = `gnfd://${bucketName}/${objectName}`;
+        console.log(`File available at: ${viewUrl}`);
+        return gnfdUrl; // Return the gnfd:// URI for the smart contract
     } else {
         throw new Error(`Failed to upload file: ${objectBroadcastResult.message}`);
     }
