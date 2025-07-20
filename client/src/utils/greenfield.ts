@@ -1,108 +1,131 @@
 // FILE: src/utils/greenfield.ts
-// NEW FILE: This contains the real logic for interacting with BNB Greenfield.
-
-// FIX: Corrected the import paths to match the latest version of the SDK.
-// import { GreenfieldClient, GRN_TESTNET_URL } from '@bnb-chain/greenfield-js-sdk';
 import { ethers } from 'ethers';
-// const { Client } = require('@bnb-chain/greenfield-js-sdk');/
-import {Client} from "@bnb-chain/greenfield-js-sdk"
+import { Client } from "@bnb-chain/greenfield-js-sdk";
+
+// Initialize the Greenfield client
 const client = Client.create(
   process.env.NEXT_PUBLIC_GREENFIELD_RPC_URL!,
   process.env.NEXT_PUBLIC_GREEN_CHAIN_ID!,
 );
 
-// Initialize the Greenfield client
-// export const gfClient = GreenfieldClient.getInstance(GRN_TESTNET_URL.GRN_RPC);
+// Helper functions from the blog post
+const getSps = async () => {
+  const sps = await client.sp.getStorageProviders();
+  const finalSps = (sps ?? []).filter((v: any) => v.endpoint.includes('nodereal'));
+  return finalSps;
+};
 
-// This is a real, simplified upload function for the hackathon.
-// It handles creating a bucket (if needed) and uploading a file.
+const selectSp = async () => {
+  const finalSps = await getSps();
+  const selectIndex = Math.floor(Math.random() * finalSps.length);
+  
+  const secondarySpAddresses = [
+    ...finalSps.slice(0, selectIndex),
+    ...finalSps.slice(selectIndex + 1),
+  ].map((item: any) => item.operatorAddress);
+  
+  return {
+    id: finalSps[selectIndex].id,
+    endpoint: finalSps[selectIndex].endpoint,
+    primarySpAddress: finalSps[selectIndex]?.operatorAddress,
+    sealAddress: finalSps[selectIndex].sealAddress,
+    secondarySpAddresses,
+  };
+};
+
 export const uploadToGreenfield = async (
-    signer: ethers.Signer, // Use the specific ethers.Signer type
-    file: File,
-    setStatusMessage: (msg: string) => void
+  signer: ethers.Signer,
+  file: File,
+  setStatusMessage: (msg: string) => void
 ): Promise<string> => {
-    
-    if (!signer.provider) {
-        throw new Error("Signer must be connected to a provider.");
-    }
-    
-    const provider = signer.provider;
-    const userAddress = await signer.getAddress();
+  if (!signer.provider) {
+    throw new Error("Signer must be connected to a provider.");
+  }
+  
+  const userAddress = await signer.getAddress();
+  const network = await signer.provider.getNetwork();
+  const chainId = network.chainId;
 
-    // 1. Get Chain ID for transaction signing
-    const network = await provider.getNetwork();
-    const chainId = network.chainId;
+  // 1. Select a storage provider
+  setStatusMessage("Selecting storage provider...");
+  const spInfo = await selectSp();
 
-    // 2. Create a unique bucket name from the user's address
-    const bucketName = userAddress.toLowerCase();
+  // 2. Create a unique bucket name from the user's address
+  const bucketName = `user-${userAddress.toLowerCase().substring(2, 10)}`;
 
-    // 3. Check if the bucket already exists
-    setStatusMessage("Checking for Greenfield storage bucket...");
-    try {
-        await client.bucket.headBucket(bucketName);
-        console.log("Storage bucket already exists.");
-    } catch (error: Error) {
-        // If the bucket doesn't exist, create it. This is a one-time setup per user.
-        if (error?.message?.includes('No such bucket')) {
-            console.log("Bucket not found, creating a new one...");
-            setStatusMessage("Creating a new storage bucket (one-time setup)...");
-            const createBucketTx = await client.bucket.createBucket({
-                bucketName: bucketName,
-                creator: userAddress,
-                visibility: 'VISIBILITY_TYPE_PUBLIC_READ',
-                chargedReadQuota: '0',
-                spInfo: {
-                    primarySpAddress: GRN_TESTNET_URL.PRIMARY_SP_ADDRESS,
-                },
-            });
-
-            const bucketSignedTx = await createBucketTx.broadcast({
-                signer,
-                domain: window.location.origin,
-                chainId,
-                rpcUrl: GRN_TESTNET_URL.GRN_RPC,
-            });
-
-            const bucketBroadcastResult = await bucketSignedTx.broadcast();
-
-            if (bucketBroadcastResult.code === 0) {
-                console.log("Bucket created successfully");
-                setStatusMessage("Storage bucket created successfully!");
-            } else {
-                throw new Error(`Failed to create bucket: ${bucketBroadcastResult.message}`);
-            }
-        } else {
-            throw error; // Re-throw other errors
-        }
-    }
-
-    // 4. Create and upload the file (object)
-    const objectName = `${Date.now()}-${file.name}`;
-    setStatusMessage(`Uploading ${file.name} to Greenfield...`);
-    const createObjectTx = await gfClient.object.createObject({
+  // 3. Check if the bucket exists or create it
+  setStatusMessage("Checking for storage bucket...");
+  try {
+    await client.bucket.headBucket(bucketName);
+    console.log("Bucket exists");
+  } catch (error: any) {
+    if (error?.message?.includes('No such bucket')) {
+      setStatusMessage("Creating new bucket...");
+      
+      const createBucketTx = await client.bucket.createBucket({
         bucketName: bucketName,
-        objectName: objectName,
         creator: userAddress,
         visibility: 'VISIBILITY_TYPE_PUBLIC_READ',
-        fileType: file.type,
-        body: file,
-    });
+        chargedReadQuota: '0',
+        spInfo: {
+          primarySpAddress: spInfo.primarySpAddress,
+        },
+      });
 
-    const objectSignedTx = await createObjectTx.broadcast({
+      const simulateInfo = await createBucketTx.simulate({
+        denom: 'BNB',
+      });
+
+      const broadcastRes = await createBucketTx.broadcast({
+        denom: 'BNB',
+        gasLimit: Number(simulateInfo.gasLimit),
+        gasPrice: simulateInfo.gasPrice,
+        payer: userAddress,
+        granter: '',
         signer,
-        domain: window.location.origin,
-        chainId,
-        rpcUrl: GRN_TESTNET_URL.GRN_RPC,
-    });
-    
-    const objectBroadcastResult = await objectSignedTx.broadcast();
+        privateKey: '',
+      });
 
-    if (objectBroadcastResult.code === 0) {
-        setStatusMessage("File uploaded successfully!");
-        // Construct the viewable URL for the file
-        const viewUrl = `https://gnfd-testnet-sp-1.nodereal.io/view/${bucketName}/${objectName}`;
-        return viewUrl;
+      if (broadcastRes.code !== 0) {
+        throw new Error(`Bucket creation failed: ${broadcastRes.message}`);
+      }
     } else {
-        throw new Error(`Failed to upload file: ${objectBroadcastResult.message}`);
+      throw error;
     }
+  }
+
+  // 4. Upload the file
+  const objectName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+  setStatusMessage(`Uploading ${file.name}...`);
+
+  const createObjectTx = await client.object.createObject({
+    bucketName,
+    objectName,
+    creator: userAddress,
+    visibility: 'VISIBILITY_TYPE_PUBLIC_READ',
+    fileType: file.type,
+    redundancyType: 'REDUNDANCY_EC_TYPE',
+    body: file,
+  });
+
+  const simulateUploadInfo = await createObjectTx.simulate({
+    denom: 'BNB',
+  });
+
+  const uploadRes = await createObjectTx.broadcast({
+    denom: 'BNB',
+    gasLimit: Number(simulateUploadInfo.gasLimit),
+    gasPrice: simulateUploadInfo.gasPrice,
+    payer: userAddress,
+    granter: '',
+    signer,
+    privateKey: '',
+  });
+
+  if (uploadRes.code !== 0) {
+    throw new Error(`Upload failed: ${uploadRes.message}`);
+  }
+
+  setStatusMessage("Upload complete!");
+  return `https://${spInfo.endpoint}/view/${bucketName}/${objectName}`;
 };

@@ -26,74 +26,81 @@ export const SubmitPaper = () => {
   const [statusMessage, setStatusMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!signer || !pdfFile || !title || !outputHash) {
-      alert("Please fill in all required fields.");
-      return;
+  if (!signer || !pdfFile || !title || !outputHash) {
+    alert("Please fill in all required fields.");
+    return;
+  }
+
+  setIsLoading(true);
+  setStatusMessage("⏳ Uploading PDF to Greenfield...");
+
+  try {
+    // Simulate upload: PDF
+    const pdfCID = await uploadToGreenfield(pdfFile);
+
+    // Construct metadata
+    const metadata = {
+      name: title,
+      description: "Research paper NFT uploaded via OpenDotSci.",
+      pdf_cid: pdfCID,
+    };
+    const metadataBlob = new Blob([JSON.stringify(metadata)], {
+      type: "application/json",
+    });
+    const metadataFile = new File([metadataBlob], "metadata.json");
+    const metadataCID = await uploadToGreenfield(metadataFile);
+
+    // Contract interaction
+    setStatusMessage("📡 Sending transaction to smart contract...");
+    const contract = new ethers.Contract(
+      logicContractAddress,
+      logicContractABI,
+      signer
+    );
+
+    const safeHash = ethers.utils.formatBytes32String(
+      outputHash.slice(0, 31) || "hash"
+    );
+    const priceInWei = ethers.utils.parseEther(price || "0");
+
+    const tx = await contract.submitPaper(
+      metadataCID,
+      pdfCID,
+      safeHash,
+      priceInWei,
+      createDAO
+    );
+
+    await tx.wait();
+
+    setStatusMessage("✅ Research paper submitted and NFT minted!");
+    setTitle("");
+    setPdfFile(null);
+    setOutputHash("");
+    setPrice("0");
+    setCreateDAO(false);
+  } catch (err) {
+    console.error("❌ Submission error:", err);
+    
+    // Type-safe error handling
+    let errorMessage = "Unknown error";
+    
+    if (err instanceof Error) {
+      errorMessage = err.message;
+    } else if (typeof err === 'string') {
+      errorMessage = err;
+    } else if (err && typeof err === 'object' && 'message' in err) {
+      errorMessage = String(err.message);
     }
 
-    setIsLoading(true);
-    setStatusMessage("⏳ Uploading PDF to Greenfield...");
-
-    try {
-      // Simulate upload: PDF
-      const pdfCID = await uploadToGreenfield(pdfFile);
-
-      // Construct metadata
-      const metadata = {
-        name: title,
-        description: "Research paper NFT uploaded via OpenDotSci.",
-        pdf_cid: pdfCID,
-      };
-      const metadataBlob = new Blob([JSON.stringify(metadata)], {
-        type: "application/json",
-      });
-      const metadataFile = new File([metadataBlob], "metadata.json");
-      const metadataCID = await uploadToGreenfield(metadataFile);
-
-      // Contract interaction
-      setStatusMessage("📡 Sending transaction to smart contract...");
-      const contract = new ethers.Contract(
-        logicContractAddress,
-        logicContractABI,
-        signer
-      );
-
-      const safeHash = ethers.utils.formatBytes32String(
-        outputHash.slice(0, 31) || "hash"
-      );
-      const priceInWei = ethers.utils.parseEther(price || "0");
-
-      const tx = await contract.submitPaper(
-        metadataCID,
-        pdfCID,
-        safeHash,
-        priceInWei,
-        createDAO
-      );
-
-      await tx.wait();
-
-      setStatusMessage("✅ Research paper submitted and NFT minted!");
-      setTitle("");
-      setPdfFile(null);
-      setOutputHash("");
-      setPrice("0");
-      setCreateDAO(false);
-    } catch (err: any) {
-      console.error("❌ Submission error:", err);
-      const errorMessage =
-        err?.error?.message || err?.message || "Unknown error";
-      setStatusMessage(
-        `❌ Submission failed: ${errorMessage.slice(0, 200)}`
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+    setStatusMessage(`❌ Submission failed: ${errorMessage.slice(0, 200)}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
   return (
     <div className="container mx-auto py-12 px-4">
       <h2 className="text-4xl font-bold text-center mb-4">Submit Your Research</h2>
