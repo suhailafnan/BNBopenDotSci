@@ -20,7 +20,7 @@ export const Explore = () => {
     const [papers, setPapers] = useState<Paper[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState("");
-
+    
     useEffect(() => {
         const fetchPapers = async () => {
             if (!provider) {
@@ -42,6 +42,7 @@ export const Explore = () => {
                         // This is a crucial step for the "Best Use of Greenfield" bounty.
                         // We are fetching the metadata JSON directly from the Greenfield URL.
                         const response = await fetch(tokenUri.replace("gnfd://", "https://gnfd-testnet-sp-1.nodereal.io/view/"));
+
                         if (!response.ok) {
                             console.error(`Failed to fetch metadata for token ${i}: ${response.statusText}`);
                             continue; // Skip this paper if metadata fails
