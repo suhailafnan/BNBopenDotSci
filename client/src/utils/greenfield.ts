@@ -69,15 +69,16 @@ try {
     ((error as { message: string }).message.includes('No such bucket'))
   ) {
     setStatusMessage("Creating new bucket...");
-    const createBucketTx = await client.bucket.createBucket({
-      bucketName: bucketName,
-      creator: userAddress,
-      visibility: VisibilityType.VISIBILITY_TYPE_PUBLIC_READ,
-      chargedReadQuota: Long.fromNumber(0),
-      spInfo: {
-        primarySpAddress: spInfo.primarySpAddress,
-      },
-    });
+const createBucketTx = await client.bucket.createBucket({
+  bucketName: bucketName,
+  creator: userAddress,
+  visibility: VisibilityType.VISIBILITY_TYPE_PUBLIC_READ,
+  chargedReadQuota: Long.fromNumber(0),
+  primarySpAddress: spInfo.primarySpAddress,
+  paymentAddress: userAddress, // <-- Add this line!
+});
+
+
 
     const simulateInfo = await createBucketTx.simulate({
       denom: 'BNB',
@@ -105,32 +106,37 @@ try {
   const objectName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
   setStatusMessage(`Uploading ${file.name}...`);
 
-  const createObjectTx = await client.object.createObject({
-    bucketName,
-    objectName,
-    creator: userAddress,
-       visibility: VisibilityType.VISIBILITY_TYPE_PUBLIC_READ,
-    // fileType: file.type,
-    redundancyType: RedundancyType.REDUNDANCY_REPLICA_TYPE,
-    body: file,
-  });
+ const payloadSize = Long.fromNumber(file.size); // File API provides this
+const contentType = file.type; // File API
+const expectChecksums: Uint8Array[] = [];// or generate if required
+
+const createObjectTx = await client.object.createObject({
+  bucketName,
+  objectName,
+  creator: userAddress,
+  visibility: VisibilityType.VISIBILITY_TYPE_PUBLIC_READ,
+  redundancyType: RedundancyType.REDUNDANCY_REPLICA_TYPE,
+  payloadSize,
+  contentType,
+  expectChecksums,
+});
+
 
   const simulateUploadInfo = await createObjectTx.simulate({
     denom: 'BNB',
   });
 
-  const uploadRes = await createObjectTx.broadcast({
-    denom: 'BNB',
-    gasLimit: Number(simulateUploadInfo.gasLimit),
-    gasPrice: simulateUploadInfo.gasPrice,
-    payer: userAddress,
-    granter: '',
-    signer,
-    privateKey: '',
-  });
+const uploadRes = await createObjectTx.broadcast({
+  denom: 'BNB',
+  gasLimit: Number(simulateUploadInfo.gasLimit),
+  gasPrice: simulateUploadInfo.gasPrice,
+  payer: userAddress,
+  granter: '',
+});
+
 
   if (uploadRes.code !== 0) {
-    throw new Error(`Upload failed: ${uploadRes.message}`);
+    throw new Error(`Upload failed: ${uploadRes.rawLog}`);
   }
 
   setStatusMessage("Upload complete!");
